@@ -1,6 +1,5 @@
 ---
 "@bunny.net/openapi-client": patch
-"@bunny.net/app-config": patch
 "@bunny.net/cli": patch
 ---
 
