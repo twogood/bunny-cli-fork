@@ -1,5 +1,12 @@
 name: Skills Check
 
+permissions:
+  contents: read
+
+concurrency:
+  group: skillscheck-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -13,5 +20,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
 
       - run: uvx skillscheck --strict skills
