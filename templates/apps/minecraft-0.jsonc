@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "world": {
-        "image": "itzg/minecraft-server:latest",
+        "image": "docker.io/itzg/minecraft-server:latest",
         "env": {
           "EULA": "TRUE",
           "MAX_PLAYERS": "5",

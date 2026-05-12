@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "app": {
-        "image": "jamie-at-bunny/mc-template-django-with-redis",
+        "image": "ghcr.io/jamie-at-bunny/mc-template-django-with-redis",
         "env": {
           "REDIS_URL": "redis://localhost:6379"
         },
@@ -20,7 +20,7 @@
         ]
       },
       "db": {
-        "image": "redis:7-alpine",
+        "image": "docker.io/redis:7-alpine",
         "volumes": [{ "name": "redis-data", "mount": "/data", "size": 5 }]
       }
     }

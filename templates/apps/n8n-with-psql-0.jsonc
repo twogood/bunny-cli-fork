@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "n8n": {
-        "image": "n8nio/n8n:latest",
+        "image": "docker.io/n8nio/n8n:latest",
         "env": {
           "DB_TYPE": "postgresdb",
           "DB_POSTGRESDB_DATABASE": "n8n",
@@ -28,7 +28,7 @@
         ]
       },
       "postgres": {
-        "image": "postgres:16-alpine",
+        "image": "docker.io/postgres:16-alpine",
         "env": {
           "POSTGRES_PASSWORD": "{{generate:db_password}}",
           "POSTGRES_USER": "n8n",

@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "app": {
-        "image": "jamie-at-bunny/mc-template-vite-react-nginx",
+        "image": "ghcr.io/jamie-at-bunny/mc-template-vite-react-nginx",
         "endpoints": [
           {
             "type": "cdn",

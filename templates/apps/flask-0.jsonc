@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "app": {
-        "image": "jamie-at-bunny/mc-template-flask",
+        "image": "ghcr.io/jamie-at-bunny/mc-template-flask",
         "endpoints": [
           {
             "type": "cdn",

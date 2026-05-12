@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "umami": {
-        "image": "umamisoftware/umami:postgresql-latest",
+        "image": "docker.io/umamisoftware/umami:postgresql-latest",
         "env": {
           "DATABASE_URL": "postgresql://umami:{{generate:db_password}}@localhost:5432/umami",
           "APP_SECRET": "{{generate:app_secret}}",
@@ -22,7 +22,7 @@
         ]
       },
       "postgres": {
-        "image": "postgres:16-alpine",
+        "image": "docker.io/postgres:16-alpine",
         "env": {
           "POSTGRES_USER": "umami",
           "POSTGRES_PASSWORD": "{{generate:db_password}}",

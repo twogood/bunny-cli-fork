@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "app": {
-        "image": "jamie-at-bunny/mc-template-laravel-with-mariadb",
+        "image": "ghcr.io/jamie-at-bunny/mc-template-laravel-with-mariadb",
         "env": {
           "DB_CONNECTION": "mariadb",
           "DB_HOST": "127.0.0.1",
@@ -28,7 +28,7 @@
         ]
       },
       "db": {
-        "image": "mariadb:latest",
+        "image": "docker.io/mariadb:latest",
         "env": {
           "MARIADB_ROOT_PASSWORD": "{{generate:root_password}}",
           "MARIADB_ALLOW_EMPTY_ROOT_PASSWORD": "0",

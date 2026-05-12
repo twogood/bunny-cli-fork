@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "wordpress": {
-        "image": "wordpress:apache",
+        "image": "docker.io/wordpress:apache",
         "env": {
           "WORDPRESS_DB_HOST": "127.0.0.1",
           "WORDPRESS_DB_USER": "wordpress",
@@ -40,7 +40,7 @@
         ]
       },
       "mariadb": {
-        "image": "mariadb:latest",
+        "image": "docker.io/mariadb:latest",
         "env": {
           "MARIADB_ROOT_PASSWORD": "{{generate:root_password}}",
           "MARIADB_USER": "wordpress",

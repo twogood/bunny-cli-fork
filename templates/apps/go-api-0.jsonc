@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "app": {
-        "image": "jamie-at-bunny/mc-template-go-api",
+        "image": "ghcr.io/jamie-at-bunny/mc-template-go-api",
         "endpoints": [
           {
             "type": "cdn",

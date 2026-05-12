@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "app": {
-        "image": "jamie-at-bunny/mc-template-hono-api-with-duckdb",
+        "image": "ghcr.io/jamie-at-bunny/mc-template-hono-api-with-duckdb",
         "env": {
           "DB_PATH": "/data/store.duckdb"
         },

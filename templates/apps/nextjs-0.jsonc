@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "app": {
-        "image": "jamie-at-bunny/mc-template-nextjs",
+        "image": "ghcr.io/jamie-at-bunny/mc-template-nextjs",
         "endpoints": [
           {
             "type": "cdn",

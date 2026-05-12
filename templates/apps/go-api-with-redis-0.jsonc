@@ -7,7 +7,7 @@
     "regions": ["DE"],
     "containers": {
       "app": {
-        "image": "jamie-at-bunny/mc-template-go-api-with-redis",
+        "image": "ghcr.io/jamie-at-bunny/mc-template-go-api-with-redis",
         "env": {
           "REDIS_URL": "redis://localhost:6379"
         },
@@ -20,7 +20,7 @@
         ]
       },
       "redis": {
-        "image": "redis:7-alpine",
+        "image": "docker.io/redis:7-alpine",
         "volumes": [{ "name": "data", "mount": "/data", "size": 1 }]
       }
     }
