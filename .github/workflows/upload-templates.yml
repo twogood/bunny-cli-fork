@@ -21,25 +21,42 @@ jobs:
         run: |
           content_type_for() {
             case "$1" in
-              *.jsonc|*.json) echo "application/json" ;;
-              *.svg)          echo "image/svg+xml" ;;
-              *.png)          echo "image/png" ;;
-              *.md)           echo "text/markdown" ;;
-              *)              echo "application/octet-stream" ;;
+              *.json) echo "application/json" ;;
+              *.svg)  echo "image/svg+xml" ;;
+              *.png)  echo "image/png" ;;
+              *.md)   echo "text/markdown" ;;
+              *)      echo "application/octet-stream" ;;
             esac
           }
 
           find templates -type f ! -name '.gitkeep' -print0 | while IFS= read -r -d '' file; do
-            CHECKSUM=$(sha256sum "$file" | awk '{print toupper($1)}')
-            CONTENT_TYPE=$(content_type_for "$file")
-            echo "Uploading $file ($CONTENT_TYPE)"
+            remote="$file"
+            upload_file="$file"
+            tmp=""
+
+            if [[ "$file" == *.jsonc ]]; then
+              tmp=$(mktemp)
+              if ! jq . "$file" > "$tmp"; then
+                echo "::error file=$file::Invalid JSON (or JSONC with comments — switch the workflow to a JSONC stripper)"
+                rm -f "$tmp"
+                exit 1
+              fi
+              upload_file="$tmp"
+              remote="${file%.jsonc}.json"
+            fi
+
+            CHECKSUM=$(sha256sum "$upload_file" | awk '{print toupper($1)}')
+            CONTENT_TYPE=$(content_type_for "$remote")
+            echo "Uploading $file -> $remote ($CONTENT_TYPE)"
             curl --fail --show-error --silent \
               -X PUT \
               -H "AccessKey: ${BUNNYNET_STORAGE_PASSWORD}" \
               -H "Content-Type: ${CONTENT_TYPE}" \
               -H "Checksum: ${CHECKSUM}" \
-              --upload-file "$file" \
-              "https://${BUNNYNET_STORAGE_ENDPOINT}/${BUNNYNET_STORAGE_ZONE}/${file}"
+              --upload-file "$upload_file" \
+              "https://${BUNNYNET_STORAGE_ENDPOINT}/${BUNNYNET_STORAGE_ZONE}/${remote}"
+
+            [ -n "$tmp" ] && rm -f "$tmp"
           done
       - name: Purge CDN cache
         env:
