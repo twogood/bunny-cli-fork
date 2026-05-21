@@ -14,11 +14,12 @@ export interface ResolvedConfig {
 export function resolveConfig(
   profile: string,
   apiKeyOverride?: string,
+  verbose?: boolean,
 ): ResolvedConfig {
   const envApiUrl = process.env.BUNNYNET_API_URL || undefined;
 
   if (apiKeyOverride) {
-    logger.debug("API key loaded from --api-key flag", true);
+    logger.debug("API key loaded from --api-key flag", verbose ?? false);
     return {
       apiKey: apiKeyOverride,
       apiUrl: envApiUrl,
@@ -29,7 +30,7 @@ export function resolveConfig(
   const envApiKey = process.env.BUNNYNET_API_KEY;
 
   if (envApiKey) {
-    logger.debug("API key loaded from BUNNYNET_API_KEY", true);
+    logger.debug("API key loaded from BUNNYNET_API_KEY", verbose ?? false);
     return {
       apiKey: envApiKey,
       apiUrl: envApiUrl,
