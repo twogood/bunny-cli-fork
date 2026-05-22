@@ -1,12 +1,12 @@
-# AGENTS.md — Bunny CLI
+# AGENTS.md: bunny.net CLI
 
-This document describes the architecture, conventions, and implementation details for the Bunny CLI. It serves as the canonical reference for AI agents and contributors working on this codebase.
+This document describes the architecture, conventions, and implementation details for the bunny.net CLI. It serves as the canonical reference for AI agents and contributors working on this codebase.
 
 ---
 
 ## Overview
 
-The Bunny CLI (`bunny`) is a command-line interface for interacting with bunny.net services (magic containers, edge scripting, databases). It is written in TypeScript, runs on the Bun runtime, and follows patterns inspired by Cobra (Go).
+The bunny.net CLI (`bunny`) is a command-line interface for interacting with bunny.net services (Magic Containers, Edge Scripting, databases). It is written in TypeScript, runs on the Bun runtime, and follows patterns inspired by Cobra (Go).
 
 The CLI supports profile-based authentication, browser-based login, and a modular command structure built on `yargs`.
 
@@ -46,7 +46,6 @@ Bun replaces the entire Node.js toolchain. There are no separate tools for trans
 | `@libsql/client` | libSQL database client (used by `db shell`)                    |
 | `openapi-fetch`  | Type-safe HTTP client generated from OpenAPI specs             |
 | `jsonc-parser`   | JSONC parser for `bunny.jsonc` config files                    |
-| `smol-toml`      | TOML v1 parser (legacy `bunny.toml` fallback only)             |
 
 ### Dev dependencies
 
@@ -174,24 +173,38 @@ bunny-cli/
 │           │   ├── apps/                 # Experimental — hidden from help and landing page
 │           │   │   ├── APPS.md           # Apps documentation (while experimental)
 │           │   │   ├── index.ts          # defineNamespace("apps", false) — hidden, registers all app commands
-│           │   │   ├── constants.ts      # Status label maps
-│           │   │   ├── config.ts         # bunny.jsonc file I/O, re-exports from @bunny.net/app-config (resolveAppId, resolveContainerId)
-│           │   │   ├── docker.ts         # Docker helpers (build, push, login, generateTag, promptRegistry)
+│           │   │   ├── constants.ts      # Status label maps + APP_MANIFEST filename + AppManifest interface (consumed via core/manifest.ts)
+│           │   │   ├── config.ts         # bunny.jsonc file I/O (saveConfig strips transient `image`/`registry`/`app.id` via stripTransientFields), re-exports from @bunny.net/app-config; provides resolveAppId, resolveContainerId, resolveContainerRegistry
+│           │   │   ├── docker.ts         # Docker + registry helpers (build, push, dockerLogin, ensureRegistryLogin, dockerHasCredentials, ghDockerLogin, generateTag, promptRegistry, resolveRegistryForImage, getConfigSuggestions, imageHostname, parseDockerfileExposedPorts/readDockerfileExposedPorts)
+│           │   │   ├── suggestions.ts    # Shared endpoint/env-var suggestion prompting (confirmEndpointSuggestions, endpointRequestToConfig, promptSuggestedEnv, filterNewEndpointSuggestions, filterNewEnvSuggestions) - used by walkthrough.ts and deploy.ts (post-push)
 │           │   │   ├── init.ts           # Scaffold bunny.jsonc (detects Dockerfile, prompts for registry)
+│           │   │   ├── link.ts           # Link this directory to an existing MC app (writes .bunny/app.json)
+│           │   │   ├── unlink.ts         # Remove .bunny/app.json
 │           │   │   ├── list.ts           # List all apps
 │           │   │   ├── show.ts           # Show app details and overview
-│           │   │   ├── deploy.ts         # Deploy app (build from Dockerfile or use --image)
+│           │   │   ├── deploy.ts         # Deploy app: positional <image>, --dockerfile, --container, --port, --command, --dry-run, --no-push
 │           │   │   ├── undeploy.ts       # Undeploy app
 │           │   │   ├── restart.ts        # Restart app
-│           │   │   ├── delete.ts         # Delete app
-│           │   │   ├── pull.ts           # Sync API → bunny.jsonc
-│           │   │   ├── push.ts           # Sync bunny.jsonc → API
+│           │   │   ├── delete.ts         # Delete app (also drops .bunny/app.json if it pointed at this app)
+│           │   │   ├── pull.ts           # Sync API → bunny.jsonc + .bunny/app.json
+│           │   │   ├── push.ts           # Sync bunny.jsonc → API (uses manifest for registry IDs)
+│           │   │   ├── walkthrough.ts    # Shared new-app walkthrough used by init and deploy (runWalkthrough, runComposeImport) - returns { config, registries } so the caller can write the manifest after creating the app
+│           │   │   ├── compose/          # docker-compose import: parse, translate, validate
+│           │   │   │   ├── index.ts      # findComposeFile, loadComposeFile, composeToConfig
+│           │   │   │   ├── schema.ts     # Zod schema for compose subset
+│           │   │   │   ├── find.ts       # locate compose.yml / docker-compose.yml
+│           │   │   │   ├── ports.ts      # parsePortMapping (short/long/IP-prefixed forms)
+│           │   │   │   ├── translate.ts  # service → ContainerConfig, warnings, hard errors
+│           │   │   │   └── *.test.ts     # ports, translate, load
 │           │   │   ├── env/
 │           │   │   │   ├── index.ts      # defineNamespace("env", ...)
 │           │   │   │   ├── list.ts       # List env vars per container
 │           │   │   │   ├── set.ts        # Set env var (read-modify-write)
 │           │   │   │   ├── remove.ts     # Remove env var
-│           │   │   │   └── pull.ts       # Pull env vars to .env file
+│           │   │   │   ├── pull.ts       # Pull env vars to .env file
+│           │   │   │   ├── push.ts       # Bulk import .env file to remote (merge or --replace, --dry-run)
+│           │   │   │   ├── parse.ts      # Minimal dotenv parser (no shell expansion)
+│           │   │   │   └── parse.test.ts # parser unit tests
 │           │   │   ├── endpoints/
 │           │   │   │   ├── index.ts      # defineNamespace("endpoints", ...)
 │           │   │   │   ├── list.ts       # List endpoints per container
@@ -245,6 +258,7 @@ bunny-cli/
 │           │   │   ├── index.ts          # Manual CommandModule (not defineNamespace) — default handler runs list
 │           │   │   ├── list.ts           # List container registries
 │           │   │   ├── add.ts            # Add registry with credentials
+│           │   │   ├── update.ts         # Update registry display name and/or rotate credentials
 │           │   │   └── remove.ts         # Remove registry
 │           │   ├── docs.ts               # Open bunny.net documentation in browser (top-level: bunny docs)
 │           │   ├── open.ts               # Open bunny.net dashboard in browser (top-level: bunny open)
@@ -530,7 +544,7 @@ Creates an `ora` spinner. Automatically silenced in non-TTY environments (`isSil
 
 ### API error normalization
 
-The Bunny APIs use two different error response formats. The shared `authMiddleware()` in `packages/openapi-client/src/middleware.ts` normalizes both into `ApiError` via an `onResponse` handler, so command code never deals with raw HTTP errors.
+The bunny.net APIs use two different error response formats. The shared `authMiddleware()` in `packages/openapi-client/src/middleware.ts` normalizes both into `ApiError` via an `onResponse` handler, so command code never deals with raw HTTP errors.
 
 | API              | Error schema              | Fields                                                                              |
 | ---------------- | ------------------------- | ----------------------------------------------------------------------------------- |
@@ -730,21 +744,28 @@ bunny
 │       ├── create <name>  (alias: add)     Create a named profile with API key
 │       └── delete <name>                   Delete a named profile
 ├── apps                                    (experimental — hidden from help and landing page)
-│   ├── init            [--name] [--image]
-│   │                                       Scaffold bunny.jsonc (detects Dockerfile)
+│   ├── init            [image] [--name] [--dockerfile] [--registry] [--port] [--command] [--config]
+│   │                                       Scaffold bunny.jsonc via shared walkthrough (no deploy); --config writes to a specific path
 │   ├── list            (alias: ls)         List all apps
 │   ├── show            [--id]              Show app details and overview
-│   ├── deploy          [--image]           Build + deploy (or deploy pre-built image)
+│   ├── deploy          [image] [--name] [--dockerfile] [--context] [--tag] [--registry] [--container] [--port] [--command] [--config] [--dry-run] [--no-push]
+│   │                                       Deploy a pre-built image, build from a Dockerfile, or re-deploy from bunny.jsonc.
+│   │                                       First-run, in order: imports compose.yml if present, else asks for Dockerfile / pre-built image.
+│   │                                       --config <path> uses that file as the source of truth (CI / agent flows); --dry-run skips writes and API.
 │   ├── undeploy        [--id] [--force]    Undeploy an app
 │   ├── restart         [--id]              Restart an app
-│   ├── delete          [--id] [--force]    Delete an app
-│   ├── pull            [--id] [--force]    Sync remote config to bunny.jsonc
-│   ├── push            [--id] [--dry-run]  Apply bunny.jsonc to remote
+│   ├── delete          [--id] [--force]    Delete an app (drops the manifest if it pointed at this app)
+│   ├── link            [app-id] [--force]  Link this directory to an existing app (omit ID for interactive selection; writes .bunny/app.json)
+│   ├── unlink          [--force]           Remove .bunny/app.json
+│   ├── pull            [--id] [--force]    Sync remote config to bunny.jsonc + .bunny/app.json
+│   ├── push            [--id] [--dry-run]  Apply bunny.jsonc to remote (uses .bunny/app.json for registry IDs)
 │   ├── env
 │   │   ├── list        [--container]       List environment variables
 │   │   ├── set         <key> <value> [--container]  Set environment variable
 │   │   ├── remove      <key> [--container] Remove environment variable
-│   │   └── pull        [--container] [--force]      Pull env vars to .env
+│   │   ├── pull        [--container] [--force]      Pull env vars to .env
+│   │   └── push        [file] [--container] [--replace] [--dry-run]
+│   │                                       Bulk import a .env file (merge by default; --replace drops vars not in file)
 │   ├── endpoints
 │   │   ├── list        [--container]       List endpoints
 │   │   ├── add         [--container] [--type] [--ssl]  Add endpoint
@@ -758,6 +779,8 @@ bunny
 ├── registries                              List container registries (default: list)
 │   ├── list            (alias: ls)         List container registries
 │   ├── add             [--name] [--username]  Add registry
+│   ├── update          <id> [--name] [--username] [--password]
+│   │                                       Update registry name and/or rotate credentials
 │   └── remove          <id>                Remove registry
 ├── db
 │   ├── create          [--name] [--primary] [--replicas] [--storage-region]
@@ -854,7 +877,7 @@ The CLI provides a `clientOptions()` helper (`packages/cli/src/core/client-optio
 
 ### Undocumented endpoints (`CustomPaths`)
 
-Some Bunny API endpoints are not included in the public OpenAPI specs. These are typed manually via a `CustomPaths` type in `packages/openapi-client/src/core-client.ts`, which is intersected with the generated `paths`:
+Some bunny.net API endpoints are not included in the public OpenAPI specs. These are typed manually via a `CustomPaths` type in `packages/openapi-client/src/core-client.ts`, which is intersected with the generated `paths`:
 
 ```typescript
 const client = createClient<paths & CustomPaths>({
@@ -1068,8 +1091,10 @@ The `.bunny/` manifest and `bunny.jsonc` serve different purposes:
 ```jsonc
 {
   "$schema": "./node_modules/@bunny.net/app-config/generated/schema.json",
+  "version": "2026-05-11",
   "app": {
     "name": "my-app",
+    "regions": ["sfo"],
     "containers": {
       "web": { "image": "nginx:latest" },
     },
@@ -1077,9 +1102,21 @@ The `.bunny/` manifest and `bunny.jsonc` serve different purposes:
 }
 ```
 
-Schemas and types are defined in `@bunny.net/app-config` using Zod. The CLI's `config.ts` handles file I/O (parsing JSONC, validating with Zod, writing with `$schema` injection) and resolution helpers (`resolveAppId`, `resolveContainerId`).
+`version` is an ISO date string. The CLI requires it on load — if a config is missing `version`, `loadConfig` throws a `UserError` with a hint to regenerate via `bunny apps pull`. There is no migration runner yet; when the first breaking shape change ships, that PR introduces one alongside its transform.
 
-Legacy `bunny.toml` files are still loadable with a deprecation warning.
+Schemas and types are defined in `@bunny.net/app-config` using Zod. The CLI's `config.ts` handles file I/O (parsing JSONC, validating with Zod, writing with `$schema` + `version` injection) and resolution helpers (`resolveAppId`, `resolveContainerId`).
+
+**Persistence model.** Three layers, with strict roles:
+
+- **`bunny.jsonc`** - committable deploy _intent_. App name, container shapes (dockerfile/image-pin/env/endpoints/volumes/command), scaling, regions. No account-scoped identities, no per-deploy artifacts.
+- **`.bunny/app.json`** - per-user _identity_ state (gitignored). `id` (app ID), container-template IDs, account-scoped registry IDs, the CLI profile this link was made under. Stored via the shared `core/manifest.ts` helpers (`loadManifest`, `saveManifest`, `removeManifest`) - the same generic pattern used by `db/` (`database.json`) and `scripts/` (`script.json`). The filename `app.json` and the `AppManifest` interface live in `apps/constants.ts`. Created by `bun-ny apps link <app-id>`, mutated during `apps deploy` and `apps pull`, dropped by `apps unlink` or `apps delete`.
+- **MC API** - source of truth for _deployed state_. The currently-running image digest and the live config.
+
+To keep these consistent and stop file churn on every deploy, `saveConfig` (`apps/config.ts`) calls `stripTransientFields` before writing - it removes `app.id`, per-container `registry`, and any `image` field on a container that has `dockerfile` set. Pre-built `image:` refs (e.g. `nginx:1.27`) are preserved because they're universally resolvable upstream identifiers, not account-scoped or build-time artifacts.
+
+`resolveAppId` and `resolveContainerRegistry` in `apps/config.ts` read from the manifest first, then fall back to legacy `app.id` / `container.registry` in `bunny.jsonc` with a one-time deprecation warning. Existing pre-manifest configs continue to work; the next save naturally migrates them by stripping the legacy fields once the manifest carries the same data.
+
+In-memory mutations during a deploy run (`targetContainer.image = imageRef`) are still required so `configToAddRequest` / `configToPatchRequest` can read the ref within the same run - they just don't make it to disk. Registry IDs for the API body are supplied via the new `RegistryMap` argument to `configToAddRequest` / `configToPatchRequest` (`@bunny.net/app-config`), sourced from the manifest at the call site.
 
 ---
 
@@ -1087,7 +1124,7 @@ Legacy `bunny.toml` files are still loadable with a deprecation warning.
 
 ### Overview
 
-The database shell is an interactive SQL REPL that connects to a bunny.net database via `@libsql/client`. It supports both interactive mode (readline-based REPL) and non-interactive mode (execute a query and exit).
+The database shell is an interactive SQL REPL that connects to a Bunny Database via `@libsql/client`. It supports both interactive mode (readline-based REPL) and non-interactive mode (execute a query and exit).
 
 ### Architecture
 

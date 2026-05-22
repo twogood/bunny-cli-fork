@@ -1,9 +1,11 @@
 import type { components } from "@bunny.net/openapi-client/generated/magic-containers.d.ts";
 import { parseImageRef } from "./parse-image-ref.ts";
-import type {
-  BunnyAppConfig,
-  ContainerConfig,
-  EndpointConfig,
+import {
+  type BunnyAppConfig,
+  type ContainerConfig,
+  CURRENT_VERSION,
+  type EndpointConfig,
+  normalizeRegions,
 } from "./schema.ts";
 
 type Application = components["schemas"]["Application"];
@@ -13,8 +15,6 @@ type ContainerRequest = components["schemas"]["ContainerRequest"];
 type PatchApplicationRequest = components["schemas"]["PatchApplicationRequest"];
 type EndpointRequest = components["schemas"]["EndpointRequest"];
 type VolumeRequest = components["schemas"]["VolumeRequest"];
-
-// ─── API → Config conversion ────────────────────────────────────────
 
 function containerTemplateToConfig(ct: ContainerTemplate): ContainerConfig {
   const config: ContainerConfig = {};
@@ -76,6 +76,7 @@ export function apiToConfig(app: Application): BunnyAppConfig {
   }
 
   const config: BunnyAppConfig = {
+    version: CURRENT_VERSION,
     app: {
       id: app.id,
       name: app.name,
@@ -90,20 +91,18 @@ export function apiToConfig(app: Application): BunnyAppConfig {
     };
   }
 
-  if (
-    app.regionSettings.allowedRegionIds.length > 0 ||
-    app.regionSettings.requiredRegionIds.length > 0
-  ) {
-    config.app.regions = {
-      allowed: app.regionSettings.allowedRegionIds,
-      required: app.regionSettings.requiredRegionIds,
-    };
+  const allowed = app.regionSettings.allowedRegionIds;
+  const required = app.regionSettings.requiredRegionIds;
+  if (allowed.length > 0 || required.length > 0) {
+    // Collapse to the simple array form when allowed === required.
+    const same =
+      allowed.length === required.length &&
+      allowed.every((id) => required.includes(id));
+    config.app.regions = same ? [...allowed] : { allowed, required };
   }
 
   return config;
 }
-
-// ─── Config → API conversion ────────────────────────────────────────
 
 function containerConfigToRequest(
   name: string,
@@ -121,6 +120,7 @@ function containerConfigToRequest(
     imageNamespace,
     imageTag,
     imageRegistryId: config.registry ?? "",
+    imagePullPolicy: "ifNotPresent",
   };
 
   if (config.command) {
@@ -187,27 +187,49 @@ function collectVolumes(
   }
 }
 
+/**
+ * Per-container registry ID overrides supplied at request-build time.
+ *
+ * Registry IDs are account-scoped (the same image can be reached via
+ * different account-side registry records) and so don't live in
+ * `bunny.jsonc`. Callers pass them in here from whatever per-user state
+ * they keep - the CLI uses `.bunny/manifest.json`.
+ */
+export type RegistryMap = Record<string, string | undefined>;
+
+function mergeRegistry(
+  name: string,
+  c: ContainerConfig,
+  registries: RegistryMap | undefined,
+): ContainerConfig {
+  const override = registries?.[name];
+  if (!override) return c;
+  return { ...c, registry: override };
+}
+
 /** Convert BunnyAppConfig to an AddApplicationRequest for creating a new app. */
 export function configToAddRequest(
   config: BunnyAppConfig,
+  registries?: RegistryMap,
 ): AddApplicationRequest {
   const containers: ContainerRequest[] = [];
   const volumes: VolumeRequest[] = [];
   const seenVolumes = new Set<string>();
 
   for (const [name, c] of Object.entries(config.app.containers)) {
-    containers.push(containerConfigToRequest(name, c));
-    collectVolumes(c, volumes, seenVolumes);
+    const merged = mergeRegistry(name, c, registries);
+    containers.push(containerConfigToRequest(name, merged));
+    collectVolumes(merged, volumes, seenVolumes);
   }
 
   return {
     name: config.app.name,
     runtimeType: "shared",
     autoScaling: config.app.scaling ?? { min: 1, max: 1 },
-    regionSettings: {
-      allowedRegionIds: config.app.regions?.allowed ?? [],
-      requiredRegionIds: config.app.regions?.required ?? [],
-    },
+    regionSettings: (() => {
+      const { allowed, required } = normalizeRegions(config.app.regions);
+      return { allowedRegionIds: allowed, requiredRegionIds: required };
+    })(),
     containerTemplates: containers,
     volumes,
   };
@@ -217,6 +239,7 @@ export function configToAddRequest(
 export function configToPatchRequest(
   config: BunnyAppConfig,
   existingApp: Application,
+  registries?: RegistryMap,
 ): PatchApplicationRequest {
   const containers: ContainerRequest[] = [];
   const volumes: VolumeRequest[] = [];
@@ -230,18 +253,19 @@ export function configToPatchRequest(
       i === 0
         ? existingApp.containerTemplates[0]
         : existingApp.containerTemplates.find((ct) => ct.name === name);
-    containers.push(containerConfigToRequest(name, c, existing?.id));
-    collectVolumes(c, volumes, seenVolumes);
+    const merged = mergeRegistry(name, c, registries);
+    containers.push(containerConfigToRequest(name, merged, existing?.id));
+    collectVolumes(merged, volumes, seenVolumes);
   }
 
   return {
     name: config.app.name,
     runtimeType: "shared",
     autoScaling: config.app.scaling ?? { min: 1, max: 1 },
-    regionSettings: {
-      allowedRegionIds: config.app.regions?.allowed ?? [],
-      requiredRegionIds: config.app.regions?.required ?? [],
-    },
+    regionSettings: (() => {
+      const { allowed, required } = normalizeRegions(config.app.regions);
+      return { allowedRegionIds: allowed, requiredRegionIds: required };
+    })(),
     containerTemplates: containers,
     volumes,
   };

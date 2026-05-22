@@ -11,6 +11,21 @@ export interface ClientOptions {
   onDebug?: (msg: string) => void;
 }
 
+/**
+ * Conservative content-type check - `application/json`,
+ * `application/problem+json`, `application/vnd.api+json`, anything
+ * with a `+json` suffix. Falls back to a substring match so
+ * `application/json; charset=utf-8` still counts.
+ */
+function looksLikeJson(contentType: string): boolean {
+  const lower = contentType.toLowerCase();
+  return (
+    lower.includes("application/json") ||
+    lower.includes("+json") ||
+    lower.includes("text/json")
+  );
+}
+
 const STATUS_MESSAGES: Record<number, string> = {
   401: "Unauthorized. Check your API key.",
   403: "Forbidden. You don't have permission for this action.",
@@ -40,12 +55,12 @@ const extractors: Array<
 ];
 
 /**
- * Shared openapi-fetch middleware for all Bunny API clients.
+ * Shared openapi-fetch middleware for all bunny.net API clients.
  *
  * **Request**: Injects `AccessKey` and `User-Agent` headers.
  *
  * **Response**: Intercepts non-OK responses and throws {@link ApiError},
- * normalizing the two different error formats used across Bunny APIs:
+ * normalizing the two different error formats used across bunny.net APIs:
  *
  * - **Core / Compute** use `ApiErrorData` (`{ ErrorKey, Field, Message }`).
  *   Only 400 responses have a JSON body; 401/404/500 are empty.
@@ -86,13 +101,44 @@ export function authMiddleware(options: ClientOptions): Middleware {
       if (debug) {
         const cloned = response.clone();
         debug(`← ${response.status} ${response.statusText}`);
-        try {
-          const body = await cloned.json();
-          debug(`← Body: ${JSON.stringify(body, null, 2)}`);
-        } catch {}
+        const contentType = response.headers.get("content-type") ?? "";
+        if (looksLikeJson(contentType)) {
+          try {
+            const body = await cloned.json();
+            debug(`← Body: ${JSON.stringify(body, null, 2)}`);
+          } catch {}
+        } else {
+          // Non-JSON body - surface the raw text (truncated) so the
+          // caller can see what arrived instead of getting nothing.
+          try {
+            const text = await cloned.text();
+            const preview = text.length > 500 ? `${text.slice(0, 500)}…` : text;
+            debug(`← Body (${contentType || "no content-type"}): ${preview}`);
+          } catch {}
+        }
       }
 
-      if (response.ok) return;
+      // OK responses with a non-JSON body would otherwise crash
+      // openapi-fetch when it tries to JSON.parse the bytes. Detect
+      // that here and translate it into a clearer ApiError. This
+      // commonly happens when a CDN / proxy / captive portal serves an
+      // HTML error page with a 200 status code.
+      if (response.ok) {
+        const contentType = response.headers.get("content-type") ?? "";
+        if (!looksLikeJson(contentType)) {
+          const text = await response.clone().text();
+          if (text.trim().length > 0) {
+            const preview = text.length > 200 ? `${text.slice(0, 200)}…` : text;
+            throw new ApiError(
+              `API returned a non-JSON ${response.status} response (content-type: ${contentType || "unset"}). ` +
+                "This usually means an intermediate proxy or CDN is intercepting the request. " +
+                `Body starts with: ${preview.replace(/\s+/g, " ").trim()}`,
+              response.status,
+            );
+          }
+        }
+        return;
+      }
 
       let body: any = null;
       try {
